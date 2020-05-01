@@ -1,11 +1,6 @@
 /*////ROBOT/STEROWANIE/IR////////ROBOT/STEROWANIE/IR////////ROBOT/STEROWANIE/IR////////ROBOT/STEROWANIE/IR////
 ////ROBOT/STEROWANIE/IR////////ROBOT/STEROWANIE/IR////////ROBOT/STEROWANIE/IR////////ROBOT/STEROWANIE/IR////*/
 
-//PROBLEM
-//Aktualnie robot jeździ sterowanie pilotem,
-// podstawowe sterowanie działa, line follower po wciśnięciu 1 też, 2 kwadrat też
-//PROBLEM kiedy wciskam 3, robot przechodzi w tryb automatycznej jazdy ale, NIE MOGĘ PILOTEM TEGO WYŁĄCZYĆ, tak jak w przypadku jazdy line follower
-
 #include <Arduino.h> //biblioteki
 #include <RC5.h>
 #include <Servo.h>
@@ -45,13 +40,9 @@ boolean rightSensor();
 #define trigPin 7
 #define echoPin 8
 
-volatile int stanRobota_A = 1;
-volatile int stanRobota_B = 1;
+volatile int stanRobota = 1;
 
-//1000=1sekunda (1000UL)
-unsigned long aktualnyCzas = 0;
-unsigned long zapamietanyCzas = 0;
-unsigned long roznicaCzasu = 0;
+int stan;
 
 /*////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP
 /////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP*/
@@ -87,13 +78,9 @@ void setup()
 
 void loop()
 {
-
-  aktualnyCzas = millis();                       // Pobieraj liczbę milisekund od startu
-  roznicaCzasu = aktualnyCzas - zapamietanyCzas; // Różnica czasu
-
-  switch (stanRobota_A)
+  switch (stanRobota)
   {
-  case 1: //Line follower
+  case 1:
     if (command == 1)
     {
       lineFollow();
@@ -102,16 +89,11 @@ void loop()
     {
       stopMotors();
     }
-    else if (command == 3)
-    {
-      automat();
-    }
-    break;
   }
 
-  if (rc5.read(&toggle, &address, &command))
+  if (rc5.read(&toggle, &address, &command) && stanRobota == 1)
   {
-    switch (command) // łatwo sprawdzić na pilocie, każdy przycisk ma swój command np. jeden to command 1
+    switch (command)
     {
     case 13:
       horn();
@@ -137,6 +119,19 @@ void loop()
       break;
     case 2:
       square();
+      digitalWrite(BUZZER, 1);
+      delay(500);
+      digitalWrite(BUZZER, 0);
+      break;
+    case 3:
+      for (int i = 0; i < 150; i++)
+      {
+        automat();
+      }
+      stopMotors();
+      digitalWrite(BUZZER, 1);
+      delay(500);
+      digitalWrite(BUZZER, 0);
       break;
     }
   }
@@ -158,7 +153,6 @@ void loop()
 /*///FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE///
 ////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE//////FUNKCJE///*/
 
-//Do fotorezystorów jeżeli pod progiem lewy zwróć 1
 boolean leftSensor()
 {
   if (analogRead(L_LINE_SENSOR) > GRANICA)
@@ -170,7 +164,7 @@ boolean leftSensor()
     return 0; //Zwroc 0
   }
 }
-//c.d. prawy
+
 boolean rightSensor()
 {
   if (analogRead(R_LINE_SENSOR) > GRANICA)
@@ -183,7 +177,6 @@ boolean rightSensor()
   }
 }
 
-//Obrót w prawo
 void leftMotor(int V)
 {
   if (V > 0)
@@ -201,7 +194,6 @@ void leftMotor(int V)
   }
 }
 
-//Obrót w prawo
 void rightMotor(int V)
 {
   if (V > 0)
@@ -219,14 +211,12 @@ void rightMotor(int V)
   }
 }
 
-//Stop silników
 void stopMotors()
 {
   analogWrite(L_PWM, 0); //Wylaczenie silnika lewego
   analogWrite(R_PWM, 0); //Wylaczenie silnika prawego
 }
 
-//Śledzenie linii
 void lineFollow()
 {
   if (leftSensor() == 0 && rightSensor() == 0)
@@ -246,7 +236,6 @@ void lineFollow()
   }
 }
 
-//Klakson
 void horn()
 {
   digitalWrite(BUZZER, HIGH);
@@ -255,8 +244,7 @@ void horn()
   delay(500);
 }
 
-//Rysuj linię
-void square()
+void square() //Funkcja kwadrat
 {
   for (int i = 0; i < 4; i++)
   {
@@ -270,7 +258,6 @@ void square()
   stopMotors();
 }
 
-//Standard do podawania odleglosci w cm
 int zmierzOdleglosc()
 {
   long czas, dystans;
@@ -287,11 +274,9 @@ int zmierzOdleglosc()
   return dystans;
 }
 
-//Funkcja odpwiedzialna za wykrywanie przeszkód serwo + Ultradzwiek///////Funkcja odpwiedzialna za wykrywanie przeszkód serwo + Ultradzwiek/////
-//Funkcja odpwiedzialna za wykrywanie przeszkód serwo + Ultradzwiek///////Funkcja odpwiedzialna za wykrywanie przeszkód serwo + Ultradzwiek/////
-
 void automat()
 {
+
   //Czy wykryto przeszkode w zakresie 0-40 cm
   if (zmierzOdleglosc() > 40)
   {
@@ -314,7 +299,6 @@ void automat()
       rightMotor(-40);
       delay(300); //Obracaj w prawo przez 400 ms
     }
-
     else
     {
       //Jeśli po prawej jest przeszkoda
@@ -346,5 +330,8 @@ void automat()
   }
 
   //Opoznienie 100ms, ponieważ nie ma potrzeby sprawdzać przeszkod czesciej
-  delay(100);
+  delay(80);
+  digitalWrite(BUZZER, 1);
+  delay(20);
+  digitalWrite(BUZZER, 0);
 }
