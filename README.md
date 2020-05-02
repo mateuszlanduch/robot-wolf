@@ -1,16 +1,12 @@
 # robot-wolf
 
 
-Robot wolf is a multifunctional robot - we controling the robot using IR pilot with standard RC5.
+Robot wolf is a multifunctional robot controlled by IR pilot using RC5 standard
 
 Robot functions:
 1. Control: front, rear, right, left, stop, horn.
 2. Line-follower
-3. Riding a square
-4. Automatic robot travel for about 20 seconds
-5. More features coming soon & fritzing scheme...
+3. Automatic drive mode
+4. More features and fritzing scheme coming soon...
 
-This moment I working is underway on automatic robot travel. The robot drives very well, 
-I using ultrasonic sensor combined with a servo was used for scanning. 
-But I would like to stop the automatic driving mode at any time. 
-For now, the robot performs this mode about 20 seconds without being able to stop - Wolf.
+Right now I'm working on some improvements for automatic drive mode. Right now it's not possible to interrupt automatic drive mode, robot will drive automatically for 20 second and stop itself.
