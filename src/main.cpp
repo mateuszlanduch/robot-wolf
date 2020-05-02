@@ -4,13 +4,14 @@
 #include <Arduino.h> //biblioteki
 #include <RC5.h>
 #include <Servo.h>
-#include <Adafruit_NeoPixel.h>
 
 #define L_PWM 5 //piny na stałe
 #define L_DIR 4
 #define R_PWM 6
 #define R_DIR 9
 #define PWM_MAX 165
+Servo serwo;
+
 #define SERWO_PIN 11
 #define GRANICA 850
 #define R_LINE_SENSOR A0
