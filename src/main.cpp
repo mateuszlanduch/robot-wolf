@@ -4,14 +4,13 @@
 #include <Arduino.h> //biblioteki
 #include <RC5.h>
 #include <Servo.h>
+#include <Adafruit_NeoPixel.h>
 
 #define L_PWM 5 //piny na stałe
 #define L_DIR 4
 #define R_PWM 6
 #define R_DIR 9
 #define PWM_MAX 165
-Servo serwo;
-
 #define SERWO_PIN 11
 #define GRANICA 850
 #define R_LINE_SENSOR A0
@@ -19,30 +18,36 @@ Servo serwo;
 #define BUZZER 10
 #define LED 13
 #define TSOP_PIN 3
+#define trigPin 7 //piny od czujnika odleglosci
+#define echoPin 8
+//define linijka 12!
 
-RC5 rc5(TSOP_PIN); //Informacja o podłączeniu odbiornika TSOP
-byte address;      //byte zmienna od 0-255
+Adafruit_NeoPixel linijka = Adafruit_NeoPixel(8, 12, NEO_GRB + NEO_KHZ800); //konfiguracja linijki PIN 12!!!!!
+Servo serwo;                                                                //serwo 11
+RC5 rc5(TSOP_PIN);                                                          //Informacja o podłączeniu odbiornika TSOP 3
+
+byte address; //byte zmienna od 0-255
 byte command;
 byte toggle;
+byte togglePoprzedni = 0;
 
 int zmierzOdleglosc();
-void automat();
-void square();
-void horn();
-void lineFollow();
-void leftMotor(int V);
-void rightMotor(int V);
-void stopMotors();
-boolean leftSensor();
-boolean rightSensor();
+int predkoscObrotu = 30;
 
-//Piny od czujnika odleglosci
-#define trigPin 7
-#define echoPin 8
+//Funkcje
+void offLed();          // wyłączenie linijki
+void speed();           //przyśpieszanie pracą silnika
+void automat();         // automatyczna jazda
+void square();          // automatyczna jazda kwadrat
+void horn();            //klakson
+void lineFollow();      //śledzenie linii
+void leftMotor(int V);  //lewy silnik
+void rightMotor(int V); //prawy
+void stopMotors();      //wyłączenie silników
+boolean leftSensor();   //do linefollowera fotorezystor
+boolean rightSensor();  //j.w.
 
-volatile int stanRobota = 1;
-
-int stan;
+volatile int stanRobota = 1; //do maszyny stanów
 
 /*////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP
 /////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP////FUNKCJA//SETUP*/
@@ -55,7 +60,6 @@ void setup()
   pinMode(L_PWM, OUTPUT);
   pinMode(R_PWM, OUTPUT);
 
-  //Konfiguracja pozostalych elementow
   pinMode(BUZZER, OUTPUT);
   digitalWrite(BUZZER, 0); //Wylaczenie buzzera
   pinMode(LED, OUTPUT);
@@ -65,12 +69,16 @@ void setup()
   pinMode(trigPin, OUTPUT); //Pin, do którego podłączymy trig jako wyjście
   pinMode(echoPin, INPUT);  //a echo, jako wejście
 
-  //Serwo do pinu 11
-  serwo.attach(SERWO_PIN);
-  //Serwo na pozycje srodkowa 90 (bo zakres 0-180)
-  serwo.write(90);
+  serwo.attach(SERWO_PIN); //Inicjalizacja
+  linijka.begin();         //Inicjalizacja LED
+  Serial.begin(9600);      // inicjalizacja monitor szeregowy
 
-  Serial.begin(9600);
+  linijka.setPixelColor(0, linijka.Color(0, 1, 0)); //Dioda nr 1 świeci na zielono r,g,b 0-255
+  linijka.show();
+
+  delay(1000);
+  offLed();        // Wyłączenie linijki LED
+  serwo.write(90); //Serwo na pozycje srodkowa 90 (bo zakres 0-180)
 }
 
 /*////LOOP//DZIAŁA ZAWSZE////////LOOP//DZIAŁA ZAWSZE////////LOOP//DZIAŁA ZAWSZE////////LOOP//DZIAŁA ZAWSZE////
@@ -85,60 +93,95 @@ void loop()
     {
       lineFollow();
     }
-    else if (command == 87)
-    {
-      stopMotors();
-    }
   }
 
-  if (rc5.read(&toggle, &address, &command) && stanRobota == 1)
+  if (rc5.read(&toggle, &address, &command))
   {
     switch (command)
     {
     case 13:
       horn();
       break;
+
     case 80:
-      leftMotor(70); //Do przodu
-      rightMotor(70);
+      offLed();
+      linijka.setPixelColor(0, linijka.Color(0, 0, 1));
+      linijka.show();
+      leftMotor(predkoscObrotu); //Do przodu
+      rightMotor(predkoscObrotu);
+      speed();
       break;
+
     case 81:
-      leftMotor(-50); //Do tyłu
-      rightMotor(-50);
+      offLed();
+      linijka.setPixelColor(0, linijka.Color(0, 0, 1));
+      linijka.show();
+      leftMotor(-predkoscObrotu); //Do tyłu
+      rightMotor(-predkoscObrotu);
+      speed();
       break;
+
     case 85:
-      leftMotor(-40); //Obrót w lewo
-      rightMotor(40);
+      offLed();
+      linijka.setPixelColor(0, linijka.Color(0, 0, 1));
+      linijka.show();
+      leftMotor(-predkoscObrotu); //Obrót w lewo
+      rightMotor(predkoscObrotu);
+      speed();
       break;
+
     case 86:
-      leftMotor(40); //Obrót w prawo
-      rightMotor(-40);
+      offLed();
+      linijka.setPixelColor(0, linijka.Color(0, 0, 1));
+      linijka.show();
+      leftMotor(predkoscObrotu); //Obrót w prawo
+      rightMotor(-predkoscObrotu);
+      speed();
       break;
-    case 87: //Stop
-      stopMotors();
+
+    case 87:
+      offLed();
+      stopMotors(); //Stop
+      predkoscObrotu = 30;
+      digitalWrite(BUZZER, 1);
+      delay(20);
+      digitalWrite(BUZZER, 0);
       break;
+
     case 2:
-      square();
+      square(); //rysuje kwadrat
       digitalWrite(BUZZER, 1);
       delay(500);
       digitalWrite(BUZZER, 0);
       break;
+
     case 3:
       for (int i = 0; i < 150; i++)
       {
-        automat();
+        offLed();
+        automat(); //automatyczna jazda
       }
       stopMotors();
       digitalWrite(BUZZER, 1);
       delay(500);
       digitalWrite(BUZZER, 0);
       break;
+
+    case 1: //zapala linijkę, w switch (stanRobota) pod 1 działa funkcja bez przerwy śledzenie linii
+      for (int i = 0; i < 8; i++)
+      {
+        linijka.setPixelColor(i, linijka.Color(0, 0, 1)); //Dioda nr 1 świeci na zielono
+        linijka.show();
+      }
+      break;
     }
   }
+
   ///////
 
   ///////
-  //Jeśli odebrano komendę pokaż w monitorze szeregowym
+
+  //Jeśli odebrano komendę pokaż w monitorze szeregowym, do sprawdzania case na pilocie
   if (rc5.read(&toggle, &address, &command))
   {
     Serial.print("A:");
@@ -219,6 +262,7 @@ void stopMotors()
 
 void lineFollow()
 {
+
   if (leftSensor() == 0 && rightSensor() == 0)
   {                //Jesli czujniki nie widza linii
     leftMotor(50); //Jazda prosto
@@ -244,18 +288,26 @@ void horn()
   delay(500);
 }
 
-void square() //Funkcja kwadrat
+void square()
 {
+  offLed();
   for (int i = 0; i < 4; i++)
   {
+    for (int i = 0; i < 8; i++)
+    {
+      linijka.setPixelColor(i, linijka.Color(0, 1, 1)); //rgb
+      linijka.show();
+    }
     leftMotor(50);
     rightMotor(46);
     delay(1000);
+    offLed();
     leftMotor(-50);
     rightMotor(50);
     delay(310);
   }
   stopMotors();
+  offLed();
 }
 
 int zmierzOdleglosc()
@@ -276,7 +328,6 @@ int zmierzOdleglosc()
 
 void automat()
 {
-
   //Czy wykryto przeszkode w zakresie 0-40 cm
   if (zmierzOdleglosc() > 40)
   {
@@ -305,7 +356,7 @@ void automat()
       serwo.write(160); //Obroc czujnik w lewo
       delay(800);       //Poczekaj 800ms dla ustabilizowania konstrukcji
 
-      //Sprawdz, czy po lowej stronie jest przeszkoda
+      //Sprawdz, czy po lewej stronie jest przeszkoda
       if (zmierzOdleglosc() > 40)
       {
         //Jesli jest pusto
@@ -328,10 +379,46 @@ void automat()
     //Ustaw czujnik prosto
     serwo.write(90);
   }
-
+  for (int i = 0; i < 8; i++)
+  {
+    linijka.setPixelColor(i, linijka.Color(0, 0, 1));
+    linijka.show();
+  }
   //Opoznienie 100ms, ponieważ nie ma potrzeby sprawdzać przeszkod czesciej
   delay(80);
   digitalWrite(BUZZER, 1);
+  offLed();
   delay(20);
   digitalWrite(BUZZER, 0);
+}
+
+void speed()
+{
+  //Jeśli bit toggle jest taki sam jak poprzednio
+  if (toggle == togglePoprzedni)
+  {
+    predkoscObrotu = predkoscObrotu + 6; //Zwieksz predkosc obrotu o 3
+
+    //Jeśli wartość prędkości przekroczy 90
+    if (predkoscObrotu >= 90)
+    {
+      predkoscObrotu = 90; //To trzymaj na 90
+    }
+  }
+  else
+  { //Jeśli bit toggle jest różny
+    //Ustaw predkosc na standardową
+    predkoscObrotu = 30;
+  }
+  //Zapamiętanie poprzedniej wartości toggle
+  togglePoprzedni = toggle;
+}
+
+void offLed()
+{
+  for (int i = 0; i < 8; i++)
+  {
+    linijka.setPixelColor(i, linijka.Color(0, 0, 0)); //Dioda nr 1 świeci na zielono
+    linijka.show();
+  }
 }
